@@ -1,0 +1,47 @@
+- name: Install required dependencies
+  zypper:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - curl
+    - tar
+    - sudo
+    - iproute2
+    - conntrack-tools
+    - socat
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+
+- name: Enable and start firewalld
+  systemd:
+    name: firewalld
+    enabled: yes
+    state: started
+
+- name: Open required firewall ports
+  firewalld:
+    port: "{{ item }}"
+    permanent: true
+    state: enabled
+    immediate: yes
+  loop:
+    - 9345/tcp
+    - 6443/tcp
+    - 10250/tcp
+    - 2379-2380/tcp
+    - 8472/udp
+    - 30000-32767/tcp
+
+- name: Reload firewalld
+  command: firewall-cmd --reload
+
+- name: Refresh zypper repositories
+  command: zypper --non-interactive refresh
+
+- name: Update all packages
+  command: zypper --non-interactive update
+
+

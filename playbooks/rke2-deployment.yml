@@ -1,0 +1,23 @@
+- name: Setup Common Configurations
+  hosts: all
+  become: true
+  roles:
+    - common
+
+- name: Setup RKE2 Masters
+  hosts: masters
+  become: true
+  roles:
+    - master
+
+- name: Setup RKE2 Agents
+  hosts: agents
+  become: true
+  roles:
+    - agent
+
+- name: Setup Management Node
+  hosts: managements
+  become: true
+  roles:
+    - management

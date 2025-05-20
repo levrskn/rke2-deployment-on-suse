@@ -1,0 +1,85 @@
+- name: Set hostname for master node
+  hostname:
+    name: "RKE2-SUSE-MASTER-{{ '%02d' | format(play_hosts.index(inventory_hostname) + 1) }}"
+
+- name: Download RKE2 install script
+  get_url:
+    url: https://get.rke2.io
+    dest: /root/install.sh
+    mode: '0755'
+
+- name: Install RKE2 server
+  shell: INSTALL_RKE2_TYPE=server ./install.sh
+  args:
+    chdir: /root
+
+- name: Create RKE2 config directory
+  file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: '0755'
+
+- name: Generate RKE2 config.yaml
+  copy:
+    dest: /etc/rancher/rke2/config.yaml
+    content: |
+      {% if inventory_hostname == groups['masters'][0] %}
+      token: myrke2cluster01
+      tls-san:
+        - {{ ansible_host }}
+      cni: canal
+      cluster-init: true
+      {% else %}
+      server: https://{{ hostvars[groups['masters'][0]]['ansible_host'] }}:9345
+      token: {{ hostvars[groups['masters'][0]]['node_token'] }}
+      tls-san:
+        - {{ hostvars[groups['masters'][0]]['ansible_host'] }}
+      cni: canal
+      {% endif %}
+
+- name: Enable and start rke2-server
+  systemd:
+    name: rke2-server
+    enabled: yes
+    state: started
+
+- name: Wait for kubeconfig to be created (first master only)
+  when: inventory_hostname == groups['masters'][0]
+  wait_for:
+    path: /etc/rancher/rke2/rke2.yaml
+    timeout: 120
+
+- name: Create .kube directory (first master only)
+  when: inventory_hostname == groups['masters'][0]
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0700'
+
+- name: Symlink kubeconfig (first master only)
+  when: inventory_hostname == groups['masters'][0]
+  file:
+    src: /etc/rancher/rke2/rke2.yaml
+    dest: /root/.kube/config
+    state: link
+    force: true
+
+- name: Symlink kubectl binary
+  file:
+    src: /var/lib/rancher/rke2/bin/kubectl
+    dest: /usr/local/bin/kubectl
+    state: link
+    force: true
+
+- name: Read RKE2 cluster join token (first master only)
+  when: inventory_hostname == groups['masters'][0]
+  slurp:
+    src: /var/lib/rancher/rke2/server/node-token
+  register: token_raw
+
+- name: Set join token fact
+  when: inventory_hostname == groups['masters'][0]
+  set_fact:
+    node_token: "{{ token_raw['content'] | b64decode }}"
+
+

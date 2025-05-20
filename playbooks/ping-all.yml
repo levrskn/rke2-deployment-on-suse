@@ -1,0 +1,7 @@
+- name: Ping all managed hosts
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Ping host
+      ping:

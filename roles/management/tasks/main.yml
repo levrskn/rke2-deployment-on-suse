@@ -1,0 +1,43 @@
+
+- name: Set hostname for management node
+  hostname:
+    name: "RKE2-SUSE-MANAGEMENT-NODE-01"
+
+- name: Download kubectl binary
+  get_url:
+    url: https://dl.k8s.io/release/v1.33.1/bin/linux/amd64/kubectl
+    dest: /usr/local/bin/kubectl
+    mode: '0755'
+
+- name: Create .kube directory
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+
+- name: Fetch kubeconfig from first master node
+  fetch:
+    src: /etc/rancher/rke2/rke2.yaml
+    dest: /tmp/kubeconfig_{{ groups['masters'][0] }}
+    flat: yes
+  delegate_to: "{{ groups['masters'][0] }}"
+
+- name: Copy kubeconfig to management node
+  copy:
+    src: "/tmp/kubeconfig_{{ groups['masters'][0] }}"
+    dest: /root/.kube/config
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Set master IP variable
+  set_fact:
+    master_ip: "{{ groups['masters'][0] }}"
+
+- name: Replace 127.0.0.1 with master IP in kubeconfig
+  replace:
+    path: /root/.kube/config
+    regexp: '127\.0\.0\.1'
+    replace: "{{ master_ip }}"

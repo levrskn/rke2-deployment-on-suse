@@ -1,0 +1,48 @@
+- name: Convert DHCP IP to Static on SUSE
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Get primary network interface name
+      set_fact:
+        primary_interface: "{{ ansible_default_ipv4.interface }}"
+
+    - name: Set facts from current DHCP config
+      set_fact:
+        static_ip: "{{ ansible_default_ipv4.address }}"
+        static_netmask: "{{ ansible_default_ipv4.netmask }}"
+        static_gateway: "{{ ansible_default_ipv4.gateway }}"
+        static_dns: "{{ ansible_dns.nameservers | default(['8.8.8.8']) | join(' ') }}"
+
+    - name: Backup original ifcfg file
+      copy:
+        src: "/etc/sysconfig/network/ifcfg-{{ primary_interface }}"
+        dest: "/etc/sysconfig/network/ifcfg-{{ primary_interface }}.bak"
+        remote_src: true
+      when: ansible_facts['os_family'] == "Suse"
+
+    - name: Generate static IP config for interface
+      copy:
+        dest: "/etc/sysconfig/network/ifcfg-{{ primary_interface }}"
+        content: |
+          BOOTPROTO='static'
+          BROADCAST=''
+          ETHTOOL_OPTIONS=''
+          IPADDR='{{ static_ip }}'
+          NETMASK='{{ static_netmask }}'
+          GATEWAY='{{ static_gateway }}'
+          NAME='{{ primary_interface }}'
+          STARTMODE='auto'
+          USERCONTROL='no'
+          DNS1='{{ static_dns.split()[0] }}'
+          {% if static_dns.split()|length > 1 %}
+          DNS2='{{ static_dns.split()[1] }}'
+          {% endif %}
+        mode: '0644'
+
+    - name: Restart network service (wicked)
+      service:
+        name: wicked
+        state: restarted
+      when: ansible_facts['os_family'] == "Suse"
